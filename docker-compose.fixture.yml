@@ -1,0 +1,110 @@
+# Redmine 7.0.1 fixture for developing and testing this tool.
+#
+# Two profiles, because the tool reads both databases Redmine runs on:
+#
+#   make fixture-up PROFILE=pg       # PostgreSQL source (or PROFILE=mysql)
+#   make fixture-seed PROFILE=pg     # fill it with test content
+#   make fixture-files PROFILE=pg    # copy Redmine's files directory out to .fixture-files/pg
+#   make fixture-down PROFILE=pg     # stop it and discard everything
+#
+# Every checkout gets a fixture of its own. There is no fixed project name: the
+# Makefile derives one from the checkout's path (FIXTURE_PROJECT), so two
+# checkouts never share containers. The databases live in tmpfs, and Redmine's
+# files directory is a named volume of that project, copied out with
+# `docker compose cp` rather than bind-mounted, so a fixture's data and its
+# attachment files always belong together. To run two checkouts' fixtures at
+# the same time, give the second one other ports (the variables below).
+
+services:
+  redmine-db:
+    profiles: ["pg"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: redmine
+      POSTGRES_PASSWORD: redmine
+      POSTGRES_DB: redmine
+    ports:
+      - "127.0.0.1:${REDMINE_TOOL_FIXTURE_PG_PORT:-5452}:5432"
+    tmpfs:
+      # Disposable: in RAM, so a reset is instant and nothing survives a down.
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U redmine"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redmine-pg:
+    profiles: ["pg"]
+    image: redmine:7.0.1
+    depends_on:
+      redmine-db:
+        condition: service_healthy
+    environment:
+      REDMINE_DB_POSTGRES: redmine-db
+      REDMINE_DB_USERNAME: redmine
+      REDMINE_DB_PASSWORD: redmine
+      REDMINE_DB_DATABASE: redmine
+      REDMINE_SECRET_KEY_BASE: fixture-only-secret-not-used-anywhere-else
+      # The image maps its own variable when it starts the server; Rails reads
+      # this one, which is what `rails runner` needs to seed the fixture.
+      SECRET_KEY_BASE: fixture-only-secret-not-used-anywhere-else
+    ports:
+      - "127.0.0.1:${REDMINE_TOOL_FIXTURE_PG_HTTP_PORT:-8034}:3000"
+    volumes:
+      - files-pg:/usr/src/redmine/files
+      - ./fixture:/seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+  redmine-mysql-db:
+    profiles: ["mysql"]
+    image: mysql:8.4
+    command: --mysql-native-password=ON
+    environment:
+      MYSQL_ROOT_PASSWORD: redmine
+      MYSQL_DATABASE: redmine
+      MYSQL_USER: redmine
+      MYSQL_PASSWORD: redmine
+    ports:
+      - "127.0.0.1:${REDMINE_TOOL_FIXTURE_MYSQL_PORT:-3309}:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uredmine -predmine"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redmine-mysql:
+    profiles: ["mysql"]
+    image: redmine:7.0.1
+    depends_on:
+      redmine-mysql-db:
+        condition: service_healthy
+    environment:
+      REDMINE_DB_MYSQL: redmine-mysql-db
+      REDMINE_DB_USERNAME: redmine
+      REDMINE_DB_PASSWORD: redmine
+      REDMINE_DB_DATABASE: redmine
+      REDMINE_SECRET_KEY_BASE: fixture-only-secret-not-used-anywhere-else
+      SECRET_KEY_BASE: fixture-only-secret-not-used-anywhere-else
+    ports:
+      - "127.0.0.1:${REDMINE_TOOL_FIXTURE_MYSQL_HTTP_PORT:-8035}:3000"
+    volumes:
+      - files-mysql:/usr/src/redmine/files
+      - ./fixture:/seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+volumes:
+  files-pg:
+  files-mysql:

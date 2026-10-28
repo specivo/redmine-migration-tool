@@ -1,0 +1,86 @@
+[project]
+name = "specivo-redmine-migration"
+version = "0.1.0"
+description = "Export a Redmine installation to a Specivo import bundle"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.12"
+authors = [{ name = "Specivo" }]
+keywords = ["specivo", "redmine", "migration", "redmine-migration", "issue-tracker"]
+dependencies = [
+    "specivo-migration-sdk @ git+https://github.com/specivo/migration-sdk@v0.1.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "aiomysql>=0.2",
+    "textile>=4.0,<5",
+    "markdownify>=0.13,<2",
+    "nh3>=0.3.4,<1",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Bug Tracking",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://specivo.io"
+Documentation = "https://specivo.io/docs/specivo/"
+Repository = "https://github.com/specivo/redmine-migration-tool"
+Issues = "https://github.com/specivo/redmine-migration-tool/issues"
+
+[project.scripts]
+specivo-redmine-migration = "specivo_redmine_migration.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+# The SDK dependency is a direct git reference.
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/specivo_redmine_migration"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "aiosqlite>=0.20",
+    "ruff>=0.8",
+    "packaging>=24",
+    "pyyaml>=6.0",
+    "types-pyyaml>=6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "fixture: needs the Redmine fixture from docker-compose.fixture.yml (skipped when it is not running)",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["textile", "textile.*", "markdownify", "markdownify.*", "aiomysql", "aiomysql.*", "asyncpg", "asyncpg.*"]
+ignore_missing_imports = true

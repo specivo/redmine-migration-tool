@@ -1,0 +1,12 @@
+Specivo Redmine migration tool
+Copyright 2026 Specivo
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Parts of this tool were ported from the Redmine importer of Specivo
+(https://github.com/specivo/specivo), by the same authors, and are relicensed
+here under the Apache License, Version 2.0.
+
+Redmine is a trademark of its respective owner. This tool is not affiliated
+with or endorsed by the Redmine project; the name is used only to say which
+system the tool reads.

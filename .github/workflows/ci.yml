@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --python ${{ matrix.python }}
+      - run: uv run pytest
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy --strict src
+
+  fixture:
+    # The tool against a real Redmine 7.0.1 on both databases Redmine supports:
+    # fixture -> bundle -> validate.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [pg, mysql]
+    env:
+      PROFILE: ${{ matrix.profile }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - run: make fixture-up
+      - run: make fixture-seed
+      - run: make fixture-files
+      - name: Fixture -> bundle -> validate
+        run: make fixture-test
+      - name: Export and validate a bundle with the command line
+        run: make fixture-export
+      - if: always()
+        run: make fixture-down
