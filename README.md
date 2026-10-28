@@ -17,6 +17,12 @@ respective owner and is used here only to say which system the tool reads (nomin
 AI-safe automation: source at [github.com/specivo/specivo](https://github.com/specivo/specivo),
 documentation at [specivo.io/docs/specivo](https://specivo.io/docs/specivo/).
 
+## Documentation
+
+- [Migrating from Redmine to Specivo](docs/migrating-from-redmine.md): the step-by-step guide, from
+  preparing the export to loading it into Specivo and cleaning up after cut-over.
+- [Bundle format specification](https://github.com/specivo/specivo/blob/v0.11.0/docs/import-bundle/v1.md).
+
 ## What it carries
 
 Everything the Redmine import built into earlier Specivo releases carried, under the same
