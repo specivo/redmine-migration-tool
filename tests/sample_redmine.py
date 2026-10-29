@@ -409,6 +409,27 @@ def _rows(host_name: str | None, text_formatting: str) -> dict[str, list[dict[st
                 "old_value": "Was #2",
                 "value": "Related to #2.",
             },
+            # Assigned from a group to a person, off a version Redmine no longer has.
+            {
+                "id": 3,
+                "journal_id": 2,
+                "property": "attr",
+                "prop_key": "assigned_to_id",
+                "old_value": "3",
+                "value": "2",
+            },
+            {
+                "id": 4,
+                "journal_id": 2,
+                "property": "attr",
+                "prop_key": "fixed_version_id",
+                "old_value": "99",
+                "value": "",
+            },
+            # The Reviewer field, a user field: handed from one person to another.
+            {"id": 5, "journal_id": 2, "property": "cf", "prop_key": "2", "old_value": "1", "value": "2"},
+            # Severity, a list field: its values are text.
+            {"id": 6, "journal_id": 2, "property": "cf", "prop_key": "1", "old_value": "Low", "value": "High"},
         ],
         "issue_relations": [
             {"id": 1, "issue_from_id": 1, "issue_to_id": 3, "relation_type": "relates"},

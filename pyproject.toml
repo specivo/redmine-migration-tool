@@ -1,6 +1,6 @@
 [project]
 name = "specivo-redmine-migration"
-version = "0.1.0"
+version = "0.2.0"
 description = "Export a Redmine installation to a Specivo import bundle"
 readme = "README.md"
 license = "Apache-2.0"
@@ -9,7 +9,7 @@ requires-python = ">=3.12"
 authors = [{ name = "Specivo" }]
 keywords = ["specivo", "redmine", "migration", "redmine-migration", "issue-tracker"]
 dependencies = [
-    "specivo-migration-sdk @ git+https://github.com/specivo/migration-sdk@v0.1.0",
+    "specivo-migration-sdk @ git+https://github.com/specivo/migration-sdk@v0.2.0",
     "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.30",
     "aiomysql>=0.2",

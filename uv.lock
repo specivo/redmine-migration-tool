@@ -876,8 +876,8 @@ wheels = [
 
 [[package]]
 name = "specivo-migration-sdk"
-version = "0.1.0"
-source = { git = "https://github.com/specivo/migration-sdk?rev=v0.1.0#e474d3ea45ac36028f9b7176a6c9e91088093cd2" }
+version = "0.2.0"
+source = { git = "https://github.com/specivo/migration-sdk?rev=v0.2.0#3168cf91291a7f7eb5f0745bd59e44e08ddd60fb" }
 dependencies = [
     { name = "jsonschema" },
     { name = "referencing" },
@@ -885,7 +885,7 @@ dependencies = [
 
 [[package]]
 name = "specivo-redmine-migration"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiomysql" },
@@ -914,7 +914,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "markdownify", specifier = ">=0.13,<2" },
     { name = "nh3", specifier = ">=0.3.4,<1" },
-    { name = "specivo-migration-sdk", git = "https://github.com/specivo/migration-sdk?rev=v0.1.0" },
+    { name = "specivo-migration-sdk", git = "https://github.com/specivo/migration-sdk?rev=v0.2.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
     { name = "textile", specifier = ">=4.0,<5" },
 ]

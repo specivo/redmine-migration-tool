@@ -10,7 +10,7 @@ respective owner and is used here only to say which system the tool reads (nomin
 
 **Compatibility:** bundle format v1, Specivo 0.11.0 or newer.
 
-- SDK: `specivo-migration-sdk` v0.1.0, pinned to its git tag.
+- SDK: `specivo-migration-sdk` v0.2.0, pinned to its git tag.
 - Tested against Redmine 7.0.1 on PostgreSQL 16 and MySQL 8.4. Python 3.12 or later.
 
 [Specivo](https://specivo.io) is a self-hosted platform for project tracking, a knowledge base and
@@ -79,13 +79,13 @@ There is no PyPI package. Releases are tags of this repository, with the wheel a
 to each [GitHub Release](https://github.com/specivo/redmine-migration-tool/releases). Install a tag:
 
 ```bash
-uv tool install git+https://github.com/specivo/redmine-migration-tool@v0.1.0
-# or: pipx install git+https://github.com/specivo/redmine-migration-tool@v0.1.0
+uv tool install git+https://github.com/specivo/redmine-migration-tool@v0.2.0
+# or: pipx install git+https://github.com/specivo/redmine-migration-tool@v0.2.0
 specivo-redmine-migration --help
 ```
 
 The tool pulls in the SDK from its own git tag (`specivo-migration-sdk @
-git+https://github.com/specivo/migration-sdk@v0.1.0`), so the machine needs `git` and access to
+git+https://github.com/specivo/migration-sdk@v0.2.0`), so the machine needs `git` and access to
 GitHub.
 
 ## Use

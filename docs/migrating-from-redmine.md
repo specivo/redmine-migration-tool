@@ -75,7 +75,7 @@ You need:
   because the migration SDK is pulled from its git tag):
 
   ```bash
-  uv tool install git+https://github.com/specivo/redmine-migration-tool@v0.1.0
+  uv tool install git+https://github.com/specivo/redmine-migration-tool@v0.2.0
   specivo-redmine-migration --version
   ```
 

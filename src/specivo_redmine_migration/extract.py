@@ -17,6 +17,7 @@ The awkward cases are documented where they occur. The recurring ones:
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -48,6 +49,7 @@ from specivo_migration_sdk import (
     WikiPage,
     WikiVersion,
 )
+from specivo_migration_sdk.format import REFERENCE_ATTRIBUTES, REFERENCE_FIELD_FORMATS, EntityType
 from specivo_migration_sdk.models import (
     AnonymousPermission,
     ContainerKind,
@@ -899,6 +901,12 @@ def extract_issue(row: dict[str, Any], custom_values: list[CustomValue] | None =
     own tree as issues are created, and two systems' nested sets never line up.
     """
     estimated = row.get("estimated_hours")
+    extra: dict[str, Any] | None = None
+    if estimated is not None and estimated < 0:
+        # Redmine refuses a negative estimate and so does the bundle format;
+        # one written into the database directly is kept aside, not dropped.
+        extra = {"redmine_estimated_hours": estimated}
+        estimated = None
     return Issue(
         source_ref=str(row["id"]),
         project_ref=str(row["project_id"]),
@@ -921,6 +929,7 @@ def extract_issue(row: dict[str, Any], custom_values: list[CustomValue] | None =
         created_at=as_utc(row.get("created_on")),
         updated_at=as_utc(row.get("updated_on")),
         closed_at=as_utc(row.get("closed_on")),
+        extra=extra,
     )
 
 
@@ -941,18 +950,89 @@ def extract_journal(row: dict[str, Any], details: list[JournalDetail]) -> Journa
     )
 
 
-def extract_journal_detail(row: dict[str, Any]) -> JournalDetail:
+def extract_journal_detail(row: dict[str, Any], reference_fields: Mapping[str, str] | None = None) -> JournalDetail:
     """Build a :class:`JournalDetail`.
 
     Both systems use the same ``property`` vocabulary and the same attribute
-    names, so only the column holding the new value is renamed.
+    names, so only the column holding the new value is renamed. A change of an
+    attribute that names a record (status, version, assignee, …) holds Redmine
+    ids, which are the bundle's refs: they go into ``old_ref`` / ``new_ref``,
+    so Specivo stores its own ids for them. So does a change of a custom field
+    whose values name a user or a version (*reference_fields*: the
+    ``field_format`` of such fields, by custom field id); Redmine already
+    writes a multiple field's change as a detail per value removed or added,
+    as the bundle wants it. Redmine keeps no name for the value; the source
+    looks one up (see :func:`name_detail_refs`), except for a parent, which
+    reads as Redmine names an issue: ``#123``.
     """
-    return JournalDetail(
-        property=cast(DetailProperty, (row.get("property") or "attr").strip()),
-        prop_key=(row.get("prop_key") or "").strip(),
-        old_value=row.get("old_value"),
-        new_value=row.get("value"),
-    )
+    prop = cast(DetailProperty, (row.get("property") or "attr").strip())
+    prop_key = (row.get("prop_key") or "").strip()
+    old, new = row.get("old_value"), row.get("value")
+    if prop == "cf" and prop_key in (reference_fields or {}):
+        return JournalDetail(property=prop, prop_key=prop_key, old_ref=_ref_value(old), new_ref=_ref_value(new))
+    if prop != "attr" or prop_key not in REFERENCE_ATTRIBUTES:
+        return JournalDetail(property=prop, prop_key=prop_key, old_value=old, new_value=new)
+    old_ref, new_ref = _ref_value(old), _ref_value(new)
+    if prop_key == "parent_id":
+        return JournalDetail(
+            property=prop,
+            prop_key=prop_key,
+            old_ref=old_ref,
+            new_ref=new_ref,
+            old_value=f"#{old_ref}" if old_ref else None,
+            new_value=f"#{new_ref}" if new_ref else None,
+        )
+    return JournalDetail(property=prop, prop_key=prop_key, old_ref=old_ref, new_ref=new_ref)
+
+
+# What a record is called in the text for one Redmine no longer has.
+_DELETED_LABELS: dict[EntityType, str] = {
+    EntityType.PROJECT: "Project",
+    EntityType.TRACKER: "Tracker",
+    EntityType.STATUS: "Status",
+    EntityType.PRIORITY: "Priority",
+    EntityType.USER: "User",
+    EntityType.CATEGORY: "Category",
+    EntityType.VERSION: "Version",
+}
+
+
+def detail_ref_entity(detail: JournalDetail, reference_fields: Mapping[str, str]) -> EntityType | None:
+    """The kind of record a detail's refs name, or ``None`` when it has none to name (or is a parent)."""
+    if detail.property == "attr" and detail.prop_key != "parent_id":
+        return REFERENCE_ATTRIBUTES.get(detail.prop_key)
+    if detail.property == "cf":
+        return REFERENCE_FIELD_FORMATS.get(reference_fields.get(detail.prop_key, ""))
+    return None
+
+
+def name_detail_refs(
+    detail: JournalDetail, entity: EntityType, names: Mapping[tuple[EntityType, str], str]
+) -> JournalDetail:
+    """Give each ref of *detail* the source's text for it, which Specivo shows when the ref is not imported.
+
+    *names* holds what Redmine calls the records it still has (a group, a
+    locked user, a version of a project not exported, …). A record Redmine
+    no longer has is named by kind and id (``Version #12 (deleted)``), so a
+    reader sees that something was there rather than "(none)".
+    """
+
+    def text(ref: str | None) -> str | None:
+        if ref is None:
+            return None
+        return names.get((entity, ref)) or f"{_DELETED_LABELS[entity]} #{ref} (deleted)"
+
+    if detail.old_value is None:
+        detail.old_value = text(detail.old_ref)
+    if detail.new_value is None:
+        detail.new_value = text(detail.new_ref)
+    return detail
+
+
+def _ref_value(value: object) -> str | None:
+    """A history value naming a record, as a ref; Redmine writes an empty one for none."""
+    text = "" if value is None else str(value).strip()
+    return text or None
 
 
 def extract_relation(row: dict[str, Any]) -> Relation | None:

@@ -10,22 +10,28 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from specivo_migration_sdk.format import EntityType
 
+from specivo_redmine_migration import extract
 from specivo_redmine_migration.extract import (
     REDMINE_CORE_FIELDS,
     TYPE_GROUP,
     TYPE_USER,
     as_utc,
     decode_disabled_core_fields,
+    detail_ref_entity,
     display_name,
     extract_activity,
     extract_group,
+    extract_issue,
+    extract_journal_detail,
     extract_priority,
     extract_role,
     extract_status,
     extract_tracker,
     extract_user,
     map_user_status,
+    name_detail_refs,
     normalise_language,
     status_category,
 )
@@ -550,3 +556,83 @@ class TestRelationNormalisation:
         )
         assert relation is not None
         assert relation.delay == 3
+
+
+class TestExtractIssueEstimate:
+    ROW = {"id": 1, "project_id": 1, "tracker_id": 1, "status_id": 1, "priority_id": 1, "subject": "S"}
+
+    def test_the_estimate_is_kept(self):
+        issue = extract_issue({**self.ROW, "estimated_hours": 7.5})
+        assert str(issue.estimated_hours) == "7.5"
+        assert issue.extra is None
+
+    def test_a_negative_estimate_is_kept_aside(self):
+        """Redmine refuses one, but a database edited by hand may hold it; the format does not."""
+        issue = extract_issue({**self.ROW, "estimated_hours": -2.0})
+        assert issue.estimated_hours is None
+        assert issue.extra == {"redmine_estimated_hours": -2.0}
+
+
+class TestJournalDetails:
+    @staticmethod
+    def _detail(prop_key: str, old: str | None, new: str | None, prop: str = "attr"):
+        return extract_journal_detail({"property": prop, "prop_key": prop_key, "old_value": old, "value": new})
+
+    @pytest.mark.parametrize(
+        "prop_key",
+        [
+            "project_id",
+            "tracker_id",
+            "status_id",
+            "priority_id",
+            "assigned_to_id",
+            "category_id",
+            "fixed_version_id",
+        ],
+    )
+    def test_an_attribute_naming_a_record_gives_refs(self, prop_key):
+        detail = self._detail(prop_key, "1", "2")
+        assert (detail.old_ref, detail.new_ref, detail.old_value, detail.new_value) == ("1", "2", None, None)
+
+    def test_an_empty_value_is_no_ref(self):
+        detail = self._detail("fixed_version_id", "", "7")
+        assert (detail.old_ref, detail.new_ref) == (None, "7")
+
+    def test_a_parent_reads_as_redmine_names_an_issue(self):
+        detail = self._detail("parent_id", None, "42")
+        assert (detail.old_ref, detail.new_ref, detail.old_value, detail.new_value) == (None, "42", None, "#42")
+
+    def test_other_values_are_kept_as_written(self):
+        assert (self._detail("done_ratio", "0", "50").old_value, self._detail("done_ratio", "0", "50").new_value) == (
+            "0",
+            "50",
+        )
+        custom = self._detail("12", "3", "4", prop="cf")
+        assert (custom.old_ref, custom.old_value, custom.new_value) == (None, "3", "4")
+
+    def test_a_user_or_version_custom_field_gives_refs(self):
+        row = {"property": "cf", "prop_key": "12", "old_value": "3", "value": ""}
+        detail = extract_journal_detail(row, {"12": "user"})
+        assert (detail.old_ref, detail.new_ref, detail.old_value, detail.new_value) == ("3", None, None, None)
+
+    def test_refs_are_named_and_a_record_gone_says_so(self):
+        names = {(EntityType.STATUS, "1"): "New"}
+        detail = name_detail_refs(self._detail("status_id", "1", "7"), EntityType.STATUS, names)
+        assert (detail.old_value, detail.new_value) == ("New", "Status #7 (deleted)")
+
+    def test_a_parent_and_plain_values_name_nothing(self):
+        assert detail_ref_entity(self._detail("parent_id", None, "42"), {}) is None
+        assert detail_ref_entity(self._detail("12", "a", "b", prop="cf"), {"13": "user"}) is None
+        assert detail_ref_entity(self._detail("12", "1", "2", prop="cf"), {"12": "version"}) is EntityType.VERSION
+
+
+class TestCustomFieldName:
+    def test_the_name_goes_with_the_field_whatever_its_script(self):
+        """Specivo shows a field by its name; a name with no ASCII key falls back to the field's id for the key."""
+        field = extract.extract_custom_field(
+            {"id": 7, "name": "ระดับความเสี่ยง", "field_format": "string", "is_for_all": True}, [], []
+        )
+        assert (field.name, field.key) == ("ระดับความเสี่ยง", "field_7")
+        assert extract.extract_custom_field({"id": 8, "name": " QA owner ", "field_format": "user"}, [], []).name == (
+            "QA owner"
+        )

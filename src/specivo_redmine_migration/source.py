@@ -26,6 +26,7 @@ from specivo_migration_sdk import (
     Group,
     Issue,
     Journal,
+    JournalDetail,
     Membership,
     Priority,
     Project,
@@ -42,11 +43,22 @@ from specivo_migration_sdk import (
     WikiRedirect,
     WikiVersion,
 )
+from specivo_migration_sdk.format import REFERENCE_FIELD_FORMATS, EntityType
 from specivo_migration_sdk.models import PrincipalKind
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from specivo_redmine_migration import db, extract
+
+# Where Redmine keeps the name of each kind of record history names (people aside).
+_NAMED_TABLES = {
+    EntityType.PROJECT: db.projects,
+    EntityType.TRACKER: db.trackers,
+    EntityType.STATUS: db.issue_statuses,
+    EntityType.PRIORITY: db.enumerations,
+    EntityType.CATEGORY: db.issue_categories,
+    EntityType.VERSION: db.versions,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -673,6 +685,11 @@ class RedmineSource:
         """
         if not issue_ids:
             return
+        reference_fields = {
+            str(field_id): field.field_format
+            for field_id, field in (await self._custom_field_index()).items()
+            if field.field_format in REFERENCE_FIELD_FORMATS
+        }
         async with self._connection() as conn:
             for start in range(0, len(issue_ids), self._batch_size):
                 chunk = issue_ids[start : start + self._batch_size]
@@ -706,10 +723,46 @@ class RedmineSource:
                     .mappings()
                     .all()
                 ):
-                    details.setdefault(detail["journal_id"], []).append(extract.extract_journal_detail(dict(detail)))
+                    details.setdefault(detail["journal_id"], []).append(
+                        extract.extract_journal_detail(dict(detail), reference_fields)
+                    )
+                await self._name_detail_refs(conn, [d for batch in details.values() for d in batch], reference_fields)
 
                 for row in rows:
                     yield extract.extract_journal(dict(row), details.get(row["id"], []))
+
+    async def _name_detail_refs(
+        self, conn: AsyncConnection, details: list[JournalDetail], reference_fields: dict[str, str]
+    ) -> None:
+        """Write Redmine's name for every record the details name by ref.
+
+        History names records the bundle may not hold: a group as assignee, a
+        locked user, a version of a project not exported, a record since
+        deleted. Specivo shows the text for those, so each ref gets its name
+        here, read from Redmine in one query per kind of record.
+        """
+        wanted: dict[EntityType, set[str]] = {}
+        named: list[tuple[JournalDetail, EntityType]] = []
+        for detail in details:
+            entity = extract.detail_ref_entity(detail, reference_fields)
+            if entity is None:
+                continue
+            named.append((detail, entity))
+            for ref in (detail.old_ref, detail.new_ref):
+                if ref is not None and ref.isdigit():
+                    wanted.setdefault(entity, set()).add(ref)
+        names: dict[tuple[EntityType, str], str] = {}
+        for entity, refs in wanted.items():
+            ids = [int(ref) for ref in refs]
+            if entity is EntityType.USER:
+                people = (await conn.execute(select(db.users).where(db.users.c.id.in_(ids)))).mappings().all()
+                names.update(((entity, str(row["id"])), extract.display_name(dict(row))) for row in people)
+                continue
+            table = _NAMED_TABLES[entity]
+            records = (await conn.execute(select(table.c.id, table.c.name).where(table.c.id.in_(ids)))).all()
+            names.update(((entity, str(row.id)), row.name) for row in records if row.name)
+        for detail, entity in named:
+            extract.name_detail_refs(detail, entity, names)
 
     async def extract_relations(self, issue_ids: list[int]) -> AsyncIterator[Relation]:
         """Stream relations touching *issue_ids*.
